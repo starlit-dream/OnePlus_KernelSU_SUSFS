@@ -946,8 +946,8 @@ runs:
         echo "::group::Rename KSU symbols"
         KSU_SRC="$KERNEL_PLATFORM_FOLDER/KernelSU-Next/kernel"
         if [ -d "$KSU_SRC" ]; then
-          find "$KSU_SRC" -name "*.c" -o -name "*.h" | xargs sed -i 's/anon_ksu_release/anon_release_guard/g' 2>/dev/null || true
-          echo "✅ anon_ksu_release renamed"
+          find "$KSU_SRC" -name "*.c" -o -name "*.h" | xargs sed -i -e 's/anon_ksu_release/anon_release_guard/g' -e 's/anon_ksu_ioctl/anon_release_ioctl/g' 2>/dev/null || true
+          echo "✅ anon_ksu_release/anon_ksu_ioctl renamed"
         else
           echo "⚠️ KSU source dir not found at $KSU_SRC"
         fi
@@ -1906,6 +1906,10 @@ runs:
         
         export KCFLAGS="${KCFLAGS:-} $MAP $MPMAP $FPMAP -no-canonical-prefixes -fdiagnostics-color=never -Qunused-arguments -Wno-unused-command-line-argument -D__ANDROID_COMMON_KERNEL__"
         export KCPPFLAGS="${KCPPFLAGS:-} $MAP $MPMAP $FPMAP"
+
+        # Remap Rust toolchain source paths to match official Kleaf style (/proc/self/cwd/...)
+        # Prevents /home/runner/work/... leaking into the kernel image.
+        export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${KERNEL_PLATFORM_FOLDER}=/proc/self/cwd"
         
         export LLVM=1 LLVM_IAS=1
         export ARCH=arm64 SUBARCH=arm64
@@ -1925,10 +1929,12 @@ runs:
         KERNEL_BUILD_DATE=$(date -u)
         export SOURCE_DATE_EPOCH=$COMMIT_TIMESTAMP
         if [ -n "${{ inputs.build_timestamp }}" ]; then
-          export KBUILD_BUILD_TIMESTAMP="${{ inputs.build_timestamp }}"
+          # Normalize to official format: "%a %b %e %H:%M:%S %Z %Y" (%e = space-padded day, e.g. "Dec  5")
+          NORM_TS=$(date -u -d "${{ inputs.build_timestamp }}" '+%a %b %e %H:%M:%S %Z %Y' 2>/dev/null || echo "${{ inputs.build_timestamp }}")
+          export KBUILD_BUILD_TIMESTAMP="$NORM_TS"
           echo "📅 Using custom build timestamp: $KBUILD_BUILD_TIMESTAMP"
         else
-          export KBUILD_BUILD_TIMESTAMP="$KERNEL_BUILD_DATE"
+          export KBUILD_BUILD_TIMESTAMP="$(date -u '+%a %b %e %H:%M:%S %Z %Y')"
           echo "📅 Using current UTC build timestamp: $KBUILD_BUILD_TIMESTAMP"
         fi
         echo "EFFECTIVE_BUILD_TIMESTAMP=$KBUILD_BUILD_TIMESTAMP" >> "$GITHUB_ENV"
