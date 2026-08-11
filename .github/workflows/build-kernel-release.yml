@@ -13,21 +13,9 @@ on:
         type: boolean
         default: false
       op_model:
-        description: 'Select the OnePlus kernels to build'
+        description: 'Select the OnePlus kernels to build (or enter exact model e.g. OP-ACE-6T)'
         required: true
-        type: choice
-        options:
-          - A14+15+16
-          - A15+16
-          - A14+15
-          - A16
-          - A15
-          - A14
-          - android16-6.12
-          - android15-6.6
-          - android14-6.1
-          - android13-5.15
-          - android12-5.10
+        type: string
         default: A14+15+16
       ksu_options:
         description: 'Enter KernelSU build json'
