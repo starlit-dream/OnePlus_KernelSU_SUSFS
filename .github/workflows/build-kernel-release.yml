@@ -164,6 +164,11 @@ jobs:
               echo "ℹ️  Android-Kernel filter applied: $av-$kv"
               echo "   Restricted to: A15 and A16 only"
               ;;
+            OP-*)
+              # Exact model match (e.g. OP-ACE-6T)
+              jq_filter="map(select(.model == \"$input\"))"
+              echo "ℹ️  Exact model filter applied: $input"
+              ;;
             *)
               echo "::warning::Unknown input '$input'. Using empty filter."
               jq_filter="map(select(false))"
