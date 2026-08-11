@@ -1992,7 +1992,9 @@ runs:
         
         case "$OP_BRANCH" in
           wild/sm8750|wild/sm8850|wild/sm8845)
-            KCFLAGS_EXTRA="-mcpu=oryon ${KCFLAGS_EXTRA}"
+            # NOTE: clang-19 (official toolchain r536225) has NO oryon/oryon-1
+            # mcpu target (those require clang-20+). Official Kleaf builds do
+            # not pass -mcpu either — keep compiler default CPU target.
             ;;
         esac
         
