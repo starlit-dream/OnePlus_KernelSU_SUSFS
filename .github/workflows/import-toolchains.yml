@@ -1,0 +1,35 @@
+name: Import Toolchains from Upstream
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download and upload toolchain assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          UPSTREAM="WildKernels/OnePlus_KernelSU_SUSFS"
+          MYREPO="${{ github.repository }}"
+          ASSETS="
+          AnyKernel3-0b46673ae91aee8d60bd6ee257b4d56d3f6a0114.tar.gz
+          build-tools-4ba19a61c7a0d63603e0d1c84eb2b610bff706a4.tar.gz
+          clang-7cb95284aba215c2e1bbb70f545867f3d9295d58.tar.gz.partaa
+          clang-7cb95284aba215c2e1bbb70f545867f3d9295d58.tar.gz.partab
+          rust-6ff98fecc15373d056564f1ad13508f812d90fa9.tar.gz
+          clang-tools-8d2e8177f56ed0543cc8866ecad6f9f32f25fffe.tar.gz
+          "
+          for a in $ASSETS; do
+            echo "=== $a ==="
+            gh release download toolchain-cache --repo "$UPSTREAM" --pattern "$a" --dir . 2>&1 | tail -1
+            ls -la "$a"
+            gh release upload toolchain-cache --repo "$MYREPO" "$a" --clobber 2>&1 | tail -1
+            rm -f "$a"
+          done
+          echo "✅ All toolchains imported"
+          gh release view toolchain-cache --repo "$MYREPO" --json assets --jq '.assets[] | .name' | wc -l
