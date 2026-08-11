@@ -1909,7 +1909,12 @@ runs:
 
         # Remap Rust toolchain source paths to match official Kleaf style (/proc/self/cwd/...)
         # Prevents /home/runner/work/... leaking into the kernel image.
+        # NOTE: kbuild's KBUILD_RUSTFLAGS does NOT consume $(RUSTFLAGS) by default
+        # (unlike KCFLAGS), so we must inject it into the top-level Makefile.
         export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${KERNEL_PLATFORM_FOLDER}=/proc/self/cwd"
+        sed -i 's/^KBUILD_RUSTFLAGS := $(rust_common_flags)/KBUILD_RUSTFLAGS := $(RUSTFLAGS) $(rust_common_flags)/' "$COMMON_KERNEL_FOLDER/Makefile" \
+          && echo "🔧 Injected \$(RUSTFLAGS) into KBUILD_RUSTFLAGS (kbuild rust remap)" \
+          || echo "⚠️  Makefile injection failed (pattern not found?)"
         
         export LLVM=1 LLVM_IAS=1
         export ARCH=arm64 SUBARCH=arm64
