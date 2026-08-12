@@ -953,6 +953,18 @@ runs:
         fi
         echo "::endgroup::"
 
+    - name: Set custom KSUN manager identity (unique signature + package)
+      shell: bash
+      if: ${{ inputs.ksu_type == 'KSUN' }}
+      run: |
+        set -euo pipefail
+        echo "::group::Set custom manager identity"
+        echo "KSU_NEXT_MANAGER_SIZE=0x396" >> "$GITHUB_ENV"
+        echo "KSU_NEXT_MANAGER_HASH=7e72aefa225a1836f45a10e1ace01314fb4112ba2de6a1342d9d9f0a808fc49e" >> "$GITHUB_ENV"
+        echo "KSU_MANAGER_PACKAGE=qqveah.qzsddn.kruzgo" >> "$GITHUB_ENV"
+        echo "✅ manager identity: sig 7e72aefa... / pkg qqveah.qzsddn.kruzgo / size 0x396"
+        echo "::endgroup::"
+
     - name: Add KernelSU
       shell: bash
       if: ${{ inputs.ksu_type == 'KSU' }}
