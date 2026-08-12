@@ -1195,6 +1195,45 @@ runs:
           fi
         fi
         
+        # Extend SUSFS symbol-hide prefix list: SUSFS's kallsyms hook only hides
+        # symbols whose names start with its hardcoded prefixes (ksu_, susfs_,
+        # ksud, is_ksu_, ...). KSU-Next symbols with other prefixes leak into
+        # /proc/kallsyms (setup_ksu_cred, is_task_ksu_domain, anon_ksu_fops,
+        # ksuver_override, bb_bprm_set_creds.ksu_sid, ...). Inject the missing
+        # prefixes into the patch file before applying it.
+        SUSFS_PATCH="$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch"
+        export SUSFS_PATCH_PATH="$SUSFS_PATCH"
+        python3 <<'PYEOF'
+        import os, sys
+
+        patch = os.environ['SUSFS_PATCH_PATH']
+        with open(patch, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        anchor = '\t\t\tsusfs_starts_with(iter->name, "ksud") ||\n'
+        inject = (
+            '+\t\t\tsusfs_starts_with(iter->name, "setup_ksu") ||\n'
+            '+\t\t\tsusfs_starts_with(iter->name, "is_task_ksu") ||\n'
+            '+\t\t\tsusfs_starts_with(iter->name, "anon_ksu") ||\n'
+            '+\t\t\tsusfs_starts_with(iter->name, "ksuver") ||\n'
+            '+\t\t\tsusfs_starts_with(iter->name, "bb_bprm_set_creds") ||\n'
+        )
+
+        if 'setup_ksu' in content:
+            print('SUSFS hide prefixes already injected, skipping')
+            sys.exit(0)
+
+        if anchor not in content:
+            print(f'ERROR: anchor line not found in {patch}', file=sys.stderr)
+            sys.exit(1)
+
+        content = content.replace(anchor, anchor + inject, 1)
+        with open(patch, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print('SUSFS hide prefixes injected (setup_ksu/is_task_ksu/anon_ksu/ksuver/bb_bprm_set_creds)')
+        PYEOF
+        
+
         patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch"
         
         # SUSFS's OPEN_REDIRECT code unconditionally calls VMA_PAD_START(), which
