@@ -1204,7 +1204,7 @@ runs:
         SUSFS_PATCH="$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch"
         export SUSFS_PATCH_PATH="$SUSFS_PATCH"
         python3 <<'PYEOF'
-        import os, sys
+        import os, sys, re
 
         patch = os.environ['SUSFS_PATCH_PATH']
         with open(patch, 'r', encoding='utf-8') as f:
@@ -1227,10 +1227,24 @@ runs:
             print(f'ERROR: anchor line not found in {patch}', file=sys.stderr)
             sys.exit(1)
 
+        # Insert the new prefix lines right after the anchor, and bump the
+        # hunk's new-side line count (+N) so GNU patch doesn't reject the
+        # file as malformed (it strictly validates counts in @@ headers).
+        pos = content.find(anchor)
+        hunk_line_start = content.rfind('\n@@ -', 0, pos) + 1
+        header_end = content.find('\n', hunk_line_start)
+        header = content[hunk_line_start:header_end]
+        m = re.match(r'@@ -(\d+),(\d+) \+(\d+),(\d+) @@', header)
+        if not m:
+            print(f'ERROR: cannot parse hunk header: {header}', file=sys.stderr)
+            sys.exit(1)
+        new_count = int(m.group(4)) + 5
+        new_header = f'@@ -{m.group(1)},{m.group(2)} +{m.group(3)},{new_count} @@'
+        content = content[:hunk_line_start] + new_header + header[len(m.group(0)):] + content[header_end:]
         content = content.replace(anchor, anchor + inject, 1)
         with open(patch, 'w', encoding='utf-8') as f:
             f.write(content)
-        print('SUSFS hide prefixes injected (setup_ksu/is_task_ksu/anon_ksu/ksuver/bb_bprm_set_creds)')
+        print(f'SUSFS hide prefixes injected + hunk header updated ({header} -> {new_header})')
         PYEOF
         
 
