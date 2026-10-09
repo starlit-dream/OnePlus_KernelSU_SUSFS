@@ -784,8 +784,11 @@ runs:
               aria_log_flags="--summary-interval=5" # Show progress every 5s in debug
           fi
           
+          # GitLab rejects browser-like User-Agents on its archive endpoints
+          # (HTTP 403), which made the SUSFS download fail instantly. Use a
+          # non-browser UA so the archive is served normally.
           local aria2_headers=(
-            "--header=User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "--header=User-Agent: aria2/1.36.0"
             "--header=Accept: */*"
             "--header=Connection: keep-alive"
           )
@@ -818,6 +821,18 @@ runs:
               attempt=$((attempt + 1))
           done
           
+          # Fallback: plain curl in case aria2 is blocked/limited by the host.
+          echo "↩️ All aria2 attempts failed, falling back to curl..."
+          if curl -sSL --fail --retry 3 --retry-delay 5 --connect-timeout 30 \
+               -A "curl/8.4.0" -o "$shm_path" "$download_url"; then
+            mkdir -p "$repo_name"
+            if tar -I "pigz -p $nproc -b 256" -x --record-size=1M -f "$shm_path" -C "$repo_name" --strip-components=1 --no-same-owner; then
+              echo "✅ Success: $repo_name synced (via curl)"
+              rm -f "$shm_path"
+              return 0
+            fi
+          fi
+          rm -rf "$repo_name" "$shm_path" 2>/dev/null
           echo "::error::All attempts failed for $url"
           return 1
         }
