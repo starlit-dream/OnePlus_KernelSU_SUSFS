@@ -2141,8 +2141,10 @@ runs:
         
         export CC="ccache clang"
         export CXX="ccache clang++"
-        export HOSTCC="ccache clang"
-        export HOSTCXX="ccache clang++"
+        # clang 19 + the in-tree libbpf (resolve_btfids) trip -Werror on two
+        # char*/const char* assignments; disable the diagnostic for host tools only.
+        export HOSTCC="ccache clang -Wno-incompatible-pointer-types-discards-qualifiers"
+        export HOSTCXX="ccache clang++ -Wno-incompatible-pointer-types-discards-qualifiers"
         
         if [ "${{ inputs.clean }}" = "false" ]; then
           echo "🚀 ccache-accelerated build"
