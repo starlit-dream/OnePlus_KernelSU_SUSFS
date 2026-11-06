@@ -954,6 +954,103 @@ runs:
         echo "✅ KernelSU Next added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
+    - name: Fetch matching manager APK
+      if: ${{ inputs.ksu_type == 'KSUN' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+        echo "::group::Fetch manager APK"
+        : "${KSUVER:?KSUVER not set}"
+        TAG="manager-${KSUVER}"
+        OUT="${ARTIFACTS_FOLDER}/manager.apk"
+        mkdir -p "$ARTIFACTS_FOLDER"
+
+        fetch_release() {
+          rm -rf /tmp/manager-apk && mkdir -p /tmp/manager-apk
+          gh release download "$1" --repo starlit-dream/KernelSU-Next \
+            --pattern "*.apk" --dir /tmp/manager-apk --clobber 2>/dev/null \
+            && find /tmp/manager-apk -name '*.apk' | head -n1
+        }
+
+        if [ -f "$GITHUB_WORKSPACE/manager.apk" ]; then
+          cp "$GITHUB_WORKSPACE/manager.apk" "$OUT"
+          echo "Using workspace-provided manager.apk"
+        elif APK=$(fetch_release "$TAG") && [ -n "$APK" ]; then
+          cp "$APK" "$OUT"
+          echo "Downloaded release ${TAG} (exact match)"
+        else
+          # 取最接近当前 KSUVER 的 manager-* (fork 比上游多几个本地提交时版本号会差 1-2)
+          ALT_NUM=$(gh release list --repo starlit-dream/KernelSU-Next --limit 100 \
+                      --json tagName --jq '.[].tagName' 2>/dev/null \
+                      | grep '^manager-' | sed 's/^manager-//' | sort -n \
+                      | awk -v want="$KSUVER" 'BEGIN{b="";d=1e18}
+                          {x=$1; dd=(x>want)?(x-want):(want-x); if(dd<d){d=dd;b=x}}
+                          END{if(b!="")print b}' || true)
+          ALT="manager-${ALT_NUM}"
+          if [ -n "${ALT_NUM:-}" ] && APK=$(fetch_release "$ALT") && [ -n "$APK" ]; then
+            cp "$APK" "$OUT"
+            echo "::warning::manager ${TAG} missing; fell back to ${ALT} - 版本不一致, 请先同步 KernelSU-Next 再重编 manager"
+          else
+            echo "::warning::no manager APK available - ZIP will not bundle a manager"
+            echo "MANAGER_APK=" >> "$GITHUB_ENV"
+            echo "::endgroup::"
+            exit 0
+          fi
+        fi
+
+        echo "MANAGER_APK=$OUT" >> "$GITHUB_ENV"
+        echo "manager.apk: $(stat -c%s "$OUT") bytes sha256=$(sha256sum "$OUT" | cut -c1-16)"
+        echo "::endgroup::"
+
+    - name: Fetch matching manager APK
+      if: ${{ inputs.ksu_type == 'KSUN' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+        echo "::group::Fetch manager APK"
+        : "${KSUVER:?KSUVER not set}"
+        TAG="manager-${KSUVER}"
+        OUT="${ARTIFACTS_FOLDER}/manager.apk"
+        mkdir -p "$ARTIFACTS_FOLDER"
+
+        fetch_release() {
+          rm -rf /tmp/manager-apk && mkdir -p /tmp/manager-apk
+          gh release download "$1" --repo starlit-dream/KernelSU-Next \
+            --pattern "*.apk" --dir /tmp/manager-apk --clobber 2>/dev/null \
+            && find /tmp/manager-apk -name '*.apk' | head -n1
+        }
+
+        if [ -f "$GITHUB_WORKSPACE/manager.apk" ]; then
+          cp "$GITHUB_WORKSPACE/manager.apk" "$OUT"
+          echo "Using workspace-provided manager.apk"
+        elif APK=$(fetch_release "$TAG") && [ -n "$APK" ]; then
+          cp "$APK" "$OUT"
+          echo "Downloaded release ${TAG} (exact match)"
+        else
+          # 精确版本缺失: 退到最新的 manager-* 并显式告警
+          ALT_NUM=$(gh release list --repo starlit-dream/KernelSU-Next --limit 100 \
+                      --json tagName --jq '.[].tagName' 2>/dev/null \
+                      | grep '^manager-' | sed 's/^manager-//' | sort -n | tail -1 || true)
+          ALT="manager-${ALT_NUM}"
+          if [ -n "${ALT:-}" ] && APK=$(fetch_release "$ALT") && [ -n "$APK" ]; then
+            cp "$APK" "$OUT"
+            echo "::warning::manager ${TAG} missing; fell back to ${ALT} - manager/内核版本不一致, 请先同步 KernelSU-Next 并重编 manager"
+          else
+            echo "::warning::no manager APK available - ZIP will not bundle a manager"
+            echo "MANAGER_APK=" >> "$GITHUB_ENV"
+            echo "::endgroup::"
+            exit 0
+          fi
+        fi
+
+        echo "MANAGER_APK=$OUT" >> "$GITHUB_ENV"
+        echo "manager.apk: $(stat -c%s "$OUT") bytes sha256=$(sha256sum "$OUT" | cut -c1-16)"
+        echo "::endgroup::"
+
     - name: Rename KSU Next kernel symbols (anti-detection)
       shell: bash
       if: ${{ inputs.ksu_type == 'KSUN' }}
@@ -2334,6 +2431,58 @@ runs:
         fi
         
         cp "$IMAGE_PATH" "$AK3_FOLDER/Image"
+
+        if [ -n "${MANAGER_APK:-}" ] && [ -f "${MANAGER_APK:-/nonexistent}" ]; then
+          cp "$MANAGER_APK" "$AK3_FOLDER/manager.apk"
+          echo "Bundled manager APK into AK3: $(stat -c%s "$AK3_FOLDER/manager.apk") bytes"
+          cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
+        # --- KernelSU manager APK (added by joint build) ---
+        if [ -f "$AKHOME/manager.apk" ]; then
+          DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
+          mkdir -p "$(dirname "$DEST")" 2>/dev/null
+          if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
+            if command -v pm >/dev/null 2>&1; then
+              if pm install -r -d "$DEST" >/dev/null 2>&1; then
+                ui_print " " "  -> KernelSU manager installed"
+              else
+                ui_print " " "  -> Manager install failed; APK kept at $DEST"
+              fi
+            else
+              ui_print " " "  -> Manager APK saved to $DEST"
+              ui_print " " "  -> Install it manually after booting Android"
+            fi
+          else
+            ui_print " " "  -> Manager APK stays in the ZIP (manager.apk); install manually"
+          fi
+        fi
+        AK3MANAGER
+        else
+          echo "No manager APK to bundle"
+        fi
+
+        if [ -n "${MANAGER_APK:-}" ] && [ -f "${MANAGER_APK:-/nonexistent}" ]; then
+          cp "$MANAGER_APK" "$AK3_FOLDER/manager.apk"
+          echo "Bundled manager APK into AK3: $(stat -c%s "$AK3_FOLDER/manager.apk") bytes"
+          cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
+        # --- KernelSU manager APK (added by joint build) ---
+        if [ -f "$AKHOME/manager.apk" ]; then
+          if cp -f "$AKHOME/manager.apk" /data/local/tmp/ksu-manager.apk 2>/dev/null; then
+            if command -v pm >/dev/null 2>&1; then
+              if pm install -r -d /data/local/tmp/ksu-manager.apk >/dev/null 2>&1; then
+                ui_print " " "  -> KernelSU manager installed"
+              else
+                ui_print " " "  -> Manager install failed; APK kept at /data/local/tmp/ksu-manager.apk"
+              fi
+            else
+              ui_print " " "  -> Manager APK saved to /data/local/tmp/ksu-manager.apk"
+              ui_print " " "  -> Install it manually after booting Android"
+            fi
+          fi
+        fi
+        AK3MANAGER
+        else
+          echo "No manager APK to bundle"
+        fi
         
         mv "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt" "$AK3_FOLDER/"
         cd "$AK3_FOLDER"
