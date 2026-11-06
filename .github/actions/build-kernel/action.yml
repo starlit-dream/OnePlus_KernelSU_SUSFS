@@ -2272,6 +2272,29 @@ runs:
           make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
         fi
         
+        if [ "${SUSFS_MODE:-patch}" = "lkm" ] && [ "${OP_SUSFS:-false}" = "true" ]; then
+          echo "::group::Build SUSFS guard LKM"
+          MOD_DIR="$KSUN_FOLDER/kernel/susfs"
+          if [ ! -d "$MOD_DIR" ]; then
+            echo "::error::KernelSU tree has no kernel/susfs; LKM mode needs a recent KernelSU-Next"
+            exit 1
+          fi
+          MOD_SRC="$COMMON_KERNEL_FOLDER/drivers/ksu_susfs"
+          rm -rf "$MOD_SRC"
+          cp -a "$MOD_DIR" "$MOD_SRC"
+          echo "Building susfs_guard_lkm.ko against $(make -s O="$OUT" kernelrelease 2>/dev/null || echo unknown)"
+          make -j"$(nproc --all)" O="$OUT" drivers/ksu_susfs/ 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
+          KO=$(find "$MOD_SRC" -name 'susfs_guard_lkm.ko' -print -quit 2>/dev/null)
+          if [ -z "$KO" ]; then
+            echo "::error::susfs_guard_lkm.ko was not produced"
+            exit 1
+          fi
+          cp "$KO" "$ARTIFACTS_FOLDER/susfs_guard_lkm.ko"
+          echo "SUSFS_KO=$ARTIFACTS_FOLDER/susfs_guard_lkm.ko" >> "$GITHUB_ENV"
+          echo "Built susfs_guard_lkm.ko: $(stat -c%s "$KO") bytes"
+          echo "::endgroup::"
+        fi
+
         BUILD_END=$(date +%s)
         BUILD_TIME=$((BUILD_END - BUILD_START))
         
@@ -2372,38 +2395,6 @@ runs:
         echo '```' >> $GITHUB_STEP_SUMMARY
         ccache -s --verbose >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-
-    - name: Build SUSFS guard LKM
-      if: ${{ env.OP_SUSFS == 'true' && env.SUSFS_MODE == 'lkm' }}
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Build SUSFS guard LKM"
-        MOD_DIR="$KSUN_FOLDER/kernel/susfs"
-        if [ ! -d "$MOD_DIR" ]; then
-          echo "::error::KernelSU tree has no kernel/susfs; LKM mode needs a recent KernelSU-Next"
-          exit 1
-        fi
-        export ARCH=arm64 SUBARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export PATH="$CLANG_BIN_PATH:$PATH"
-        export CC="ccache clang"
-        export LD="$COMMON_KERNEL_FOLDER/ld-wrapper"
-        export HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper"
-        KDIR="$COMMON_KERNEL_FOLDER"
-        KOUT="$COMMON_KERNEL_FOLDER/out"
-
-        # Build it as an in-tree module: an out-of-tree M= build picks up the
-        # tree's -include chain with relative paths and cannot find
-        # generated/autoconf.h, while an in-tree obj-m build gets them right.
-        MOD_SRC="$KDIR/drivers/ksu_susfs"
-        rm -rf "$MOD_SRC"
-        cp -a "$MOD_DIR" "$MOD_SRC"
-        echo "Building susfs_guard_lkm.ko against $(make -C "$KDIR" O="$KOUT" -s kernelrelease 2>/dev/null || echo unknown)"
-        make -C "$KDIR" -j"$(nproc --all)" O="$KOUT" ARCH=arm64 LLVM_IAS=1 \
-          CC="$CC" LD="$LD" HOSTLD="$HOSTLD" drivers/ksu_susfs/ 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
-        KO=$(find "$MOD_SRC" -name 'susfs_guard_lkm.ko' -print -quit 2>/dev/null)
-        echo "::endgroup::"
 
     - name: Collect Build Stats / Validate Image
       id: collect_stats
