@@ -22,6 +22,12 @@ on:
         required: true
         type: string
         default: '[{"type":"ksun","hash":"dev"}]'
+      susfs_mode:
+        description: "SUSFS delivery: patch = external kernel patches, lkm = build susfs_guard_lkm.ko from KernelSU-Next"
+        required: true
+        type: choice
+        options: [patch, lkm]
+        default: patch
       optimize_level:
         description: "Compiler optimization level"
         required: true
@@ -691,6 +697,7 @@ jobs:
           ksu_type: ${{ matrix.ksu_type }}
           ksu_branch_or_hash: ${{ matrix.ksu_resolved_hash }}
           susfs_commit_hash_or_branch: ${{ matrix.susfs_resolved_hash }}
+          susfs_mode: ${{ inputs.susfs_mode }}
           optimize_level: ${{ inputs.optimize_level }}
           build_timestamp: ${{ inputs.build_timestamp }}
           clean: ${{ inputs.clean_build }}
