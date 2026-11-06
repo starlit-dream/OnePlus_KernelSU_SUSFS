@@ -2392,21 +2392,17 @@ runs:
         export HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper"
         KDIR="$COMMON_KERNEL_FOLDER"
         KOUT="$COMMON_KERNEL_FOLDER/out"
-        cd "$KDIR"
-        make -C "$KDIR" O="$KOUT" modules_prepare >/dev/null 2>&1 || true
+
+        # Build it as an in-tree module: an out-of-tree M= build picks up the
+        # tree's -include chain with relative paths and cannot find
+        # generated/autoconf.h, while an in-tree obj-m build gets them right.
+        MOD_SRC="$KDIR/drivers/ksu_susfs"
+        rm -rf "$MOD_SRC"
+        cp -a "$MOD_DIR" "$MOD_SRC"
         echo "Building susfs_guard_lkm.ko against $(make -C "$KDIR" O="$KOUT" -s kernelrelease 2>/dev/null || echo unknown)"
-        make -C "$KDIR" -j"$(nproc --all)" O="$KOUT" M="$MOD_DIR" ARCH=arm64 LLVM_IAS=1 \
-          CC="$CC" LD="$LD" HOSTLD="$HOSTLD" modules 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
-        KO=$(find "$MOD_DIR" -name 'susfs_guard_lkm.ko' -print -quit)
-        if [ -z "$KO" ]; then
-          echo "::error::susfs_guard_lkm.ko was not produced"
-          tail -n 60 "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log" || true
-          exit 1
-        fi
-        cp "$KO" "$ARTIFACTS_FOLDER/susfs_guard_lkm.ko"
-        echo "SUSFS_KO=$ARTIFACTS_FOLDER/susfs_guard_lkm.ko" >> "$GITHUB_ENV"
-        echo "Built: $(stat -c%s "$KO") bytes"
-        (command -v modinfo >/dev/null 2>&1 && modinfo "$KO" | head -n 12) || true
+        make -C "$KDIR" -j"$(nproc --all)" O="$KOUT" ARCH=arm64 LLVM_IAS=1 \
+          CC="$CC" LD="$LD" HOSTLD="$HOSTLD" drivers/ksu_susfs/ 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
+        KO=$(find "$MOD_SRC" -name 'susfs_guard_lkm.ko' -print -quit 2>/dev/null)
         echo "::endgroup::"
 
     - name: Collect Build Stats / Validate Image
