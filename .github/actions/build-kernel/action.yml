@@ -2155,6 +2155,15 @@ runs:
         OUT=out
         mkdir -p "$OUT"
 
+        # clang 19 promotes two const-qualifier discards inside the in-tree libbpf
+        # (built for resolve_btfids) to errors via -Werror. Cast them before the build.
+        LIBBPF_FILES=$(find "$COMMON_KERNEL_FOLDER/tools" -name 'libbpf.c' 2>/dev/null || true)
+        if [ -n "$LIBBPF_FILES" ]; then
+          sed -i 's|res = strstr(sym_name, "\.llvm\.");|res = (char *)strstr(sym_name, ".llvm.");|' $LIBBPF_FILES || true
+          sed -i "s|next_path = strchr(s, ':');|next_path = (char *)strchr(s, ':');|" $LIBBPF_FILES || true
+          echo "libbpf const-cast fixups applied to: $(echo $LIBBPF_FILES | tr ' ' '\n' | wc -l) file(s)"
+        fi
+
         echo "============================================"
         echo "🔍 Compiler & ccache Verification"
         echo "============================================"
