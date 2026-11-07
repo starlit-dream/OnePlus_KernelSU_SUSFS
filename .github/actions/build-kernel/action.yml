@@ -2298,7 +2298,7 @@ runs:
           fi
           echo "susfs sources staged at $MOD_SRC ($(ls "$MOD_SRC" | wc -l) entries)"
           echo "Building susfs_guard_lkm.ko against $(make -s O="$OUT" kernelrelease 2>/dev/null || echo unknown)"
-          make -j"$(nproc --all)" O="$OUT" M="$MOD_SRC" modules 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
+          KBUILD_MODPOST_WARN=1 make -j"$(nproc --all)" O="$OUT" M="$MOD_SRC" modules 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
           KO=$(find "$MOD_SRC" -name 'susfs_guard_lkm.ko' -print -quit 2>/dev/null)
           if [ -z "$KO" ]; then
             echo "::error::susfs_guard_lkm.ko was not produced"
@@ -2527,7 +2527,7 @@ runs:
           MODDIR=/data/adb/modules/susfs_lkm
           if mkdir -p "$MODDIR" 2>/dev/null && cp -f "$AKHOME/susfs_guard_lkm.ko" "$MODDIR/susfs_guard_lkm.ko" 2>/dev/null; then
             printf 'id=susfs_lkm\nname=SUSFS Guard LKM\nversion=v2.3.0-lkm\nversionCode=1\nauthor=KernelSU-Next\ndescription=Loads susfs_guard_lkm.ko at post-fs-data\n' > "$MODDIR/module.prop"
-            printf '#!/system/bin/sh\nMODDIR=${0%%/*}\ninsmod "$MODDIR/susfs_guard_lkm.ko" 2>/dev/null || true\n' > "$MODDIR/post-fs-data.sh"
+            printf '%s\n' '#!/system/bin/sh' 'MODDIR=${0%/*}' 'KO="$MODDIR/susfs_guard_lkm.ko"' 'KS=/data/adb/ksu/bin/ksud' '[ -x "$KS" ] || KS=ksud' 'if command -v "$KS" >/dev/null 2>&1; then "$KS" insmod "$KO" && exit 0; fi' 'insmod "$KO"' > "$MODDIR/post-fs-data.sh"
             chmod 0755 "$MODDIR/post-fs-data.sh"
             ui_print " " "  -> SUSFS guard LKM staged (loads at post-fs-data)"
           else
