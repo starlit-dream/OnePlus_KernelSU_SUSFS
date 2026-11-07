@@ -2279,9 +2279,16 @@ runs:
             echo "::error::KernelSU tree has no kernel/susfs; LKM mode needs a recent KernelSU-Next"
             exit 1
           fi
-          MOD_SRC="$COMMON_KERNEL_FOLDER/drivers/ksu_susfs"
+          # Already cd'ed into the kernel tree; COMMON_KERNEL_FOLDER may be
+          # relative, which would nest the copy. Anchor on $PWD instead.
+          MOD_SRC="$PWD/drivers/ksu_susfs"
           rm -rf "$MOD_SRC"
           cp -a "$MOD_DIR" "$MOD_SRC"
+          if [ ! -f "$MOD_SRC/Makefile" ]; then
+            echo "::error::staging kernel/susfs into the tree produced no Makefile at $MOD_SRC"
+            exit 1
+          fi
+          echo "susfs sources staged at $MOD_SRC ($(ls "$MOD_SRC" | wc -l) entries)"
           echo "Building susfs_guard_lkm.ko against $(make -s O="$OUT" kernelrelease 2>/dev/null || echo unknown)"
           make -j"$(nproc --all)" O="$OUT" M=drivers/ksu_susfs modules 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
           KO=$(find "$MOD_SRC" -name 'susfs_guard_lkm.ko' -print -quit 2>/dev/null)
