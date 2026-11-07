@@ -2255,6 +2255,14 @@ runs:
         
         BUILD_START=$(date +%s)
         set -o pipefail
+
+        # In lkm mode we also need modules built: only then does kbuild produce
+        # Module.symvers, and without it modpost refuses to resolve kernel
+        # exports (_printk, init_mm, stop_machine) for susfs_guard_lkm.ko.
+        BUILD_TARGETS="Image"
+        if [ "${SUSFS_MODE:-patch}" = "lkm" ] && [ "${OP_SUSFS:-false}" = "true" ]; then
+          BUILD_TARGETS="Image modules"
+        fi
         
         if [ "${{ inputs.debug }}" == "true" ]; then
           make V=1 LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image modules 2>&1 | tee build.log
@@ -2269,7 +2277,7 @@ runs:
           
           ls -la "$DEBUG_ARTIFACTS_FOLDER"
         else
-          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" Image 2>&1 | tee build.log
+          make LD="$COMMON_KERNEL_FOLDER/ld-wrapper" HOSTLD="$COMMON_KERNEL_FOLDER/ld-wrapper" -j"$(nproc --all)" O="$OUT" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" CONFIG_FAKE_DISABLE="$CONFIG_FAKE_DISABLE" $BUILD_TARGETS 2>&1 | tee build.log
         fi
         
         if [ "${SUSFS_MODE:-patch}" = "lkm" ] && [ "${OP_SUSFS:-false}" = "true" ]; then
