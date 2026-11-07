@@ -2283,7 +2283,7 @@ runs:
           rm -rf "$MOD_SRC"
           cp -a "$MOD_DIR" "$MOD_SRC"
           echo "Building susfs_guard_lkm.ko against $(make -s O="$OUT" kernelrelease 2>/dev/null || echo unknown)"
-          make -j"$(nproc --all)" O="$OUT" drivers/ksu_susfs/ 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
+          make -j"$(nproc --all)" O="$OUT" M=drivers/ksu_susfs modules 2>&1 | tee "$DEBUG_ARTIFACTS_FOLDER/susfs_lkm_build.log"
           KO=$(find "$MOD_SRC" -name 'susfs_guard_lkm.ko' -print -quit 2>/dev/null)
           if [ -z "$KO" ]; then
             echo "::error::susfs_guard_lkm.ko was not produced"
