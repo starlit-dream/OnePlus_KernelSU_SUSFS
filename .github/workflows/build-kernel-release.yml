@@ -210,7 +210,8 @@ jobs:
           ksu_ref=$(echo "$ksu_options_normalized" | jq -r '.[0].hash')
           
           if [ "$ksu_type" == "KSUN" ]; then
-            KSU_REPO_OWNER="KernelSU-Next"
+            # 用 fork 解析分支/hash：内核 KSU_VERSION 与管理器 versionCode 必须来自同一棵树
+            KSU_REPO_OWNER="starlit-dream"
             KSU_REPO_NAME="KernelSU-Next"
           else
             KSU_REPO_OWNER="tiann"
