@@ -910,10 +910,20 @@ runs:
         cd "$KERNEL_PLATFORM_FOLDER"
         echo "Adding KernelSU Next..."
         KSU_INPUT="${{ inputs.ksu_branch_or_hash }}"
+        # 从 fork 拉 KSU 源码：内核与管理器必须同一棵树，否则 commit 数不同 -> KSU_VERSION 与管理器 versionCode 不一致
+        KSU_SETUP_URL="https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh"
         if [ -z "$KSU_INPUT" ]; then
-          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          curl --fail --location --proto '=https' -LSs "$KSU_SETUP_URL" \
+            | sed -e 's|^OWNER="KernelSU-Next"|OWNER="starlit-dream"|' -e 's|^REPO="\$OWNER"|REPO="KernelSU-Next"|' \
+            | bash -
         else
-          curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s "$KSU_INPUT"
+          curl --fail --location --proto '=https' -LSs "$KSU_SETUP_URL" \
+            | sed -e 's|^OWNER="KernelSU-Next"|OWNER="starlit-dream"|' -e 's|^REPO="\$OWNER"|REPO="KernelSU-Next"|' \
+            | bash -s "$KSU_INPUT"
+        fi
+        if ! git -C KernelSU-Next remote get-url origin 2>/dev/null | grep -q "starlit-dream"; then
+          echo "::error::KSU source is not starlit-dream/KernelSU-Next — manager version would mismatch"
+          exit 1
         fi
         git submodule update --init --recursive
         cd KernelSU-Next/kernel
