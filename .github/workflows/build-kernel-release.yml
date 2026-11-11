@@ -603,13 +603,38 @@ jobs:
 
       - name: Install Minimal Dependencies
         run: |
-          set -euo pipefail
+          set -uo pipefail
           echo "::group::Install dependencies"
-          sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates build-essential clang lld flex bison \
-            libelf-dev libssl-dev libncurses-dev zlib1g-dev lz4 liblz4-dev \
-            libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz
+          PKGS="git curl ca-certificates build-essential clang lld flex bison libelf-dev libssl-dev libncurses-dev zlib1g-dev lz4 liblz4-dev libxml2-utils rsync unzip dwarves file python3 ccache jq bc dos2unix kmod libdw-dev elfutils pigz"
+          APT_OPTS=(-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+
+          # 某些 runner 解析不了 security.ubuntu.com（Azure 镜像重定向），退回官方归档源
+          fallback_apt_sources() {
+            echo "::warning::apt 源不可达，切到 archive.ubuntu.com"
+            CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-noble}")"
+            sudo rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            {
+              echo "deb http://archive.ubuntu.com/ubuntu $CODENAME main universe"
+              echo "deb http://archive.ubuntu.com/ubuntu $CODENAME-updates main universe"
+              echo "deb http://security.ubuntu.com/ubuntu $CODENAME-security main universe"
+            } | sudo tee /etc/apt/sources.list >/dev/null
+          }
+
+          ok=0
+          for attempt in 1 2 3 4; do
+            echo "--- apt 尝试 $attempt/4 ---"
+            if sudo apt-get "${APT_OPTS[@]}" update -qq \
+               && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${APT_OPTS[@]}" $PKGS; then
+              ok=1
+              break
+            fi
+            if [ "$attempt" -ge 2 ]; then
+              fallback_apt_sources
+            fi
+            sleep $((attempt * 10))
+          done
+          [ "$ok" = 1 ] || { echo "::error::dependency install failed after 4 attempts"; exit 1; }
+
           sudo apt-get clean
           echo "✅ Dependencies installed"
           echo "::endgroup::"
