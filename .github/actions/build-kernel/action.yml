@@ -2532,18 +2532,18 @@ runs:
         # pm install 替换 APK 会立刻杀死该进程，脚本中断、UI 误报刷写失败。
         # 只把 APK 放到固定位置，由用户手动安装。
         cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
-# --- KernelSU manager APK (added by joint build) ---
-if [ -f "$AKHOME/manager.apk" ]; then
-  DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
-  mkdir -p "$(dirname "$DEST")" 2>/dev/null
-  if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
-    ui_print " " "  -> Manager APK saved to $DEST"
-    ui_print " " "  -> Install it manually after flashing"
-  else
-    ui_print " " "  -> Manager APK stays in the ZIP; install manually"
-  fi
-fi
-AK3MANAGER
+        # --- KernelSU manager APK (added by joint build) ---
+        if [ -f "$AKHOME/manager.apk" ]; then
+          DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
+          mkdir -p "$(dirname "$DEST")" 2>/dev/null
+          if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
+            ui_print " " "  -> Manager APK saved to $DEST"
+            ui_print " " "  -> Install it manually after flashing"
+          else
+            ui_print " " "  -> Manager APK stays in the ZIP; install manually"
+          fi
+        fi
+        AK3MANAGER
         # 拼接后必须仍是合法 shell，否则刷入时会在半路报 syntax error
         sh -n "$AK3_FOLDER/anykernel.sh" || { echo "::error::anykernel.sh syntax error after appending blocks"; exit 1; }
 
