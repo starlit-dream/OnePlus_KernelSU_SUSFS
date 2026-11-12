@@ -2506,34 +2506,6 @@ runs:
           echo "" >> "$AK3_FOLDER/anykernel.sh"
         fi
 
-        if [ -n "${MANAGER_APK:-}" ] && [ -f "${MANAGER_APK:-/nonexistent}" ]; then
-          cp "$MANAGER_APK" "$AK3_FOLDER/manager.apk"
-          echo "Bundled manager APK into AK3: $(stat -c%s "$AK3_FOLDER/manager.apk") bytes"
-          cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
-        # --- KernelSU manager APK (added by joint build) ---
-        if [ -f "$AKHOME/manager.apk" ]; then
-          DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
-          mkdir -p "$(dirname "$DEST")" 2>/dev/null
-          if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
-            if command -v pm >/dev/null 2>&1; then
-              if pm install -r -d "$DEST" >/dev/null 2>&1; then
-                ui_print " " "  -> KernelSU manager installed"
-              else
-                ui_print " " "  -> Manager install failed; APK kept at $DEST"
-              fi
-            else
-              ui_print " " "  -> Manager APK saved to $DEST"
-              ui_print " " "  -> Install it manually after booting Android"
-            fi
-          else
-            ui_print " " "  -> Manager APK stays in the ZIP (manager.apk); install manually"
-          fi
-        fi
-        AK3MANAGER
-        else
-          echo "No manager APK to bundle"
-        fi
-
         if [ "${SUSFS_MODE:-patch}" = "lkm" ] && [ -n "${SUSFS_KO:-}" ] && [ -f "${SUSFS_KO:-/nonexistent}" ]; then
           cp "$SUSFS_KO" "$AK3_FOLDER/susfs_guard_lkm.ko"
           echo "Bundled SUSFS LKM into AK3: $(stat -c%s "$AK3_FOLDER/susfs_guard_lkm.ko") bytes"
@@ -2555,6 +2527,31 @@ runs:
           echo "SUSFS LKM not bundled (mode=${SUSFS_MODE:-patch})"
         fi
         
+
+        # 管理器安装必须放最后：pm install 会替换正在运行的管理器进程，
+        # 脚本会在这里被杀死，之前的所有步骤必须已经完成。
+          cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
+        # --- KernelSU manager APK (added by joint build) ---
+        if [ -f "$AKHOME/manager.apk" ]; then
+          DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
+          mkdir -p "$(dirname "$DEST")" 2>/dev/null
+          if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
+            if command -v pm >/dev/null 2>&1; then
+              ui_print " " "  -> Installing manager (this app will restart)"
+              if pm install -r -d "$DEST" >/dev/null 2>&1; then
+                ui_print " " "  -> KernelSU manager installed"
+              else
+                ui_print " " "  -> Manager install failed; APK kept at $DEST"
+              fi
+            else
+              ui_print " " "  -> Manager APK saved to $DEST"
+              ui_print " " "  -> Install it manually after booting Android"
+            fi
+          else
+            ui_print " " "  -> Manager APK stays in the ZIP (manager.apk); install manually"
+          fi
+        fi
+        AK3MANAGER
         # 拼接后必须仍是合法 shell，否则刷入时会在半路报 syntax error
         sh -n "$AK3_FOLDER/anykernel.sh" || { echo "::error::anykernel.sh syntax error after appending blocks"; exit 1; }
 
