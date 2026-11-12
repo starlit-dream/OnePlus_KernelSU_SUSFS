@@ -2528,30 +2528,22 @@ runs:
         fi
         
 
-        # 管理器安装必须放最后：pm install 会替换正在运行的管理器进程，
-        # 脚本会在这里被杀死，之前的所有步骤必须已经完成。
-          cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
-        # --- KernelSU manager APK (added by joint build) ---
-        if [ -f "$AKHOME/manager.apk" ]; then
-          DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
-          mkdir -p "$(dirname "$DEST")" 2>/dev/null
-          if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
-            if command -v pm >/dev/null 2>&1; then
-              ui_print " " "  -> Installing manager (this app will restart)"
-              if pm install -r -d "$DEST" >/dev/null 2>&1; then
-                ui_print " " "  -> KernelSU manager installed"
-              else
-                ui_print " " "  -> Manager install failed; APK kept at $DEST"
-              fi
-            else
-              ui_print " " "  -> Manager APK saved to $DEST"
-              ui_print " " "  -> Install it manually after booting Android"
-            fi
-          else
-            ui_print " " "  -> Manager APK stays in the ZIP (manager.apk); install manually"
-          fi
-        fi
-        AK3MANAGER
+        # 绝不能在刷写脚本里安装管理器：刷写跑在管理器自己的进程里，
+        # pm install 替换 APK 会立刻杀死该进程，脚本中断、UI 误报刷写失败。
+        # 只把 APK 放到固定位置，由用户手动安装。
+        cat >> "$AK3_FOLDER/anykernel.sh" <<'AK3MANAGER'
+# --- KernelSU manager APK (added by joint build) ---
+if [ -f "$AKHOME/manager.apk" ]; then
+  DEST="${MANAGER_APK_DEST:-/data/local/tmp/ksu-manager.apk}"
+  mkdir -p "$(dirname "$DEST")" 2>/dev/null
+  if cp -f "$AKHOME/manager.apk" "$DEST" 2>/dev/null; then
+    ui_print " " "  -> Manager APK saved to $DEST"
+    ui_print " " "  -> Install it manually after flashing"
+  else
+    ui_print " " "  -> Manager APK stays in the ZIP; install manually"
+  fi
+fi
+AK3MANAGER
         # 拼接后必须仍是合法 shell，否则刷入时会在半路报 syntax error
         sh -n "$AK3_FOLDER/anykernel.sh" || { echo "::error::anykernel.sh syntax error after appending blocks"; exit 1; }
 
