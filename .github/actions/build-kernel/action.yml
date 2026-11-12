@@ -2500,6 +2500,12 @@ runs:
         
         cp "$IMAGE_PATH" "$AK3_FOLDER/Image"
 
+        # 上游 anykernel.sh 末行没有换行符，直接 append 会把新块接到最后一行，
+        # 产生 `ui_print " "# --- ... ---` 这种行，ash 报 syntax error 后整个尾部不执行
+        if [ -n "$(tail -c1 "$AK3_FOLDER/anykernel.sh" | tr -d '\n')" ]; then
+          echo "" >> "$AK3_FOLDER/anykernel.sh"
+        fi
+
         if [ -n "${MANAGER_APK:-}" ] && [ -f "${MANAGER_APK:-/nonexistent}" ]; then
           cp "$MANAGER_APK" "$AK3_FOLDER/manager.apk"
           echo "Bundled manager APK into AK3: $(stat -c%s "$AK3_FOLDER/manager.apk") bytes"
@@ -2549,6 +2555,9 @@ runs:
           echo "SUSFS LKM not bundled (mode=${SUSFS_MODE:-patch})"
         fi
         
+        # 拼接后必须仍是合法 shell，否则刷入时会在半路报 syntax error
+        sh -n "$AK3_FOLDER/anykernel.sh" || { echo "::error::anykernel.sh syntax error after appending blocks"; exit 1; }
+
         mv "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt" "$AK3_FOLDER/"
         cd "$AK3_FOLDER"
         
